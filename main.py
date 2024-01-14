@@ -110,7 +110,7 @@ def scrape_words(user_id, requester):
 if __name__ == "__main__":
     while True:
         if workers >= 3:
-            pass
+            continue
 
         _, element = r.blpop(['task_queue'], timeout=0)
 
