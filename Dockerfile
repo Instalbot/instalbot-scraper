@@ -1,11 +1,10 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 COPY . /app
 
 WORKDIR /app
 
-RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
-RUN playwright install
+RUN playwright install firefox
 
 CMD python app.py
