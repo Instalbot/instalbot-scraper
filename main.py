@@ -55,7 +55,7 @@ def scrape_words(user_id, requester):
                 return
 
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
+            browser = playwright.firefox.launch(headless=True)
             page = browser.new_page()
             page.goto("https://instaling.pl/teacher.php?page=login")
 
