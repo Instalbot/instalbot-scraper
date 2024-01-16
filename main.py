@@ -64,6 +64,9 @@ def scrape_words(user_id, requester):
             page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click()
 
             if page.url == "https://instaling.pl/teacher.php?page=login":
+                print(f'Wrong credentials: {requester}-{user_id}')
+                workers = workers - 1
+                r.publish('workers_finished', f"SCRAPER-FAILED-{requester}-{user_id}")
                 return
 
             page.locator('//*[@id="student_panel"]/p[5]/a').click()
