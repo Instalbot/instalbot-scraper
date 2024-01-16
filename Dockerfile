@@ -7,4 +7,4 @@ WORKDIR /app
 RUN pip install -r requirements.txt
 RUN playwright install firefox
 
-CMD python app.py
+CMD python main.py
