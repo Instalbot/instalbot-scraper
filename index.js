@@ -8,7 +8,13 @@ const instaling_password = "";
   const page = await browser.newPage();
   await page.goto("https://instaling.pl/teacher.php?page=login");
 
-  //do naprawy pokonuje nas dodanie przez instaling prośby o zaakcepowanie ciasteczek
+  await page.waitForLoadState("networkidle");
+
+  try {
+    page.locator('xpath=/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/button[1]').click(timeout = 5000);
+  } catch {
+    //pass
+  }
 
   await page.fill('//*[@id="log_email"]', instaling_user);
   await page.fill('//*[@id="log_password"]', instaling_password);
