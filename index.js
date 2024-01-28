@@ -1,7 +1,19 @@
 const { chromium } = require("playwright");
+const { Client } = require('pg');
+
+require('dotenv').config();
+
+const client = new Client({
+  user: process.env.DATABASE_USERNAME,
+  host: process.env.DATABASE_HOST,
+  database: process.env.DATABASE_NAME,
+  password: process.env.DATABASE_PASSWORD,
+  port: 5432,
+});
 
 const instaling_user = "";
 const instaling_password = "";
+const userId = 2;
 
 (async () => {
   const browser = await chromium.launch({ headless: false });
@@ -31,6 +43,8 @@ const instaling_password = "";
 
   await page.waitForLoadState("networkidle");
 
+  await client.connect();
+
   const data = [];
   let tr = 1;
   while (true) {
@@ -46,5 +60,9 @@ const instaling_password = "";
   }
 
   await browser.close();
+
+  json_data = JSON.stringify(data);
+  await client.query("INSERT INTO words(userId, list) VALUES($1, $2) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", [userId, json_data]);
+  await client.end();
 }
 )();
