@@ -2,9 +2,10 @@
   "name": "instalbot-scraper",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,12 @@
   "dependencies": {
     "dotenv": "^16.4.1",
     "pg": "^8.11.3",
-    "playwright": "^1.41.1"
+    "playwright": "^1.41.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "@types/pg": "^8.11.0",
+    "typescript": "^5.3.3"
   }
 }
