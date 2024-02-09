@@ -50,7 +50,7 @@ function random(min: number, max: number) {
 
 async function scraper(userId: number) {
   if (!process.env.INSTALING_KEY)
-  return logger.error(`startBot(): Master key not set, killing`);
+  return logger.error(`scraper(): Master key not set, killing`);
 
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
@@ -59,24 +59,20 @@ async function scraper(userId: number) {
     try {
         client = await pool.connect()
     } catch(err) {
-        return logger.error(`startBot(): Cannot connect to database: ${(err as Error).message}`)
+        return logger.error(`scraper(): Cannot connect to database: ${(err as Error).message}`)
     }
 
-    let res;
+    let userData: DatabaseUserRes;
 
     try {
-        res = await client.query("SELECT * FROM users INNER JOIN flags on users.userid = flags.userid INNER JOIN words on users.userid = words.userid WHERE users.userid = $1", [userId]);
+        const result = await client.query('SELECT instaling_user, instaling_pass FROM flags WHERE userid = $1', [userId]);
+        userData = result.rows[0];
     } catch(err) {
         return logger.error(`scraper(): Cannot query database: ${(err as Error).message}`);
     }
 
-    const userData: DatabaseUserRes | undefined = res.rows[0];
-
-    if (userData === undefined)
-        return logger.warn(`scraper(): User with id ${userId} doesn't exist or didn't scrape words yet`);
-
     const password = xorEncryption(userData.instaling_pass, process.env.INSTALING_KEY);
-
+    
     // --[ LOGIN LOGIC ]--------------------------------------------------------
 
     let browser: Browser;
@@ -87,7 +83,7 @@ async function scraper(userId: number) {
             args: ["--mute-audio"]
         });
     } catch(err) {
-        return logger.error(`startBot(): Cannot spawn browser: ${(err as Error).message}`);
+        return logger.error(`scraper(): Cannot spawn browser: ${(err as Error).message}`);
     }
 
     const context = await browser.newContext({
@@ -110,7 +106,7 @@ async function scraper(userId: number) {
 
     await page.locator("xpath=/html/body/div[2]/div[2]/div[1]/div[2]/div[2]/button[1]")
         .click()
-        .catch(() => logger.warn(`startBot(): Cannot find cookie button for session ${userId}`));
+        .catch(() => logger.warn(`scraper(): Cannot find cookie button for session ${userId}`));
 
     await sleep(random(300, 1000));
 
@@ -123,7 +119,7 @@ async function scraper(userId: number) {
     } catch(err) {
         await context.close();
         await browser.close();
-        return logger.error(`startBot(): Cannot login: ${(err as Error).message}`);
+        return logger.error(`scraper(): Cannot login: ${(err as Error).message}`);
     }
 
     await page.waitForLoadState("domcontentloaded");
@@ -131,7 +127,7 @@ async function scraper(userId: number) {
     if (!page.url().startsWith("https://instaling.pl/student/pages/mainPage.php")) {
         await context.close();
         await browser.close();
-        return logger.log(`startBot(): Invalid login credentials for session ${userId}`);
+        return logger.log(`scraper(): Invalid login credentials for session ${userId}`);
     }
 
     // --[ SCRAPE LOGIC ]------------------------------------------------------
