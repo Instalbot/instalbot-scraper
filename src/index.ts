@@ -116,6 +116,7 @@ async function scraper(userId: number) {
         await page.locator('//*[@id="log_password"]').pressSequentially(password, { timeout: 20000, delay: random(230, 600) });
         await sleep(random(500, 1500));
         await page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click();
+        logger.log(`scraper(): Logged in for session ${userId}`);
     } catch(err) {
         await context.close();
         await browser.close();
@@ -132,21 +133,33 @@ async function scraper(userId: number) {
 
     // --[ SCRAPE LOGIC ]------------------------------------------------------
 
-    await page.click('//*[@id="student_panel"]/p[5]/a');
-    await page.click('//*[@id="account_page"]/div/a[1]/h4');
-    await page.click('//*[@id="show_words"]');
-    await page.waitForTimeout(1000);
+    await sleep(random(300, 1000));
+    await page.waitForLoadState("domcontentloaded");
 
-    await page.waitForLoadState("networkidle");
+    await page.click('//*[@id="student_panel"]/p[5]/a');
+
+    await sleep(random(300, 1000));
+    await page.waitForLoadState("domcontentloaded");
+
+    await page.click('//*[@id="account_page"]/div/a[1]/h4');
+
+    await sleep(random(300, 1000));
+    await page.waitForLoadState("domcontentloaded");
+
+    await page.click('//*[@id="show_words"]');
+
+    
+    await sleep(random(300, 1000));
+    await page.waitForLoadState("domcontentloaded");
 
     const data = [];
     let tr = 1;
     while (true) {
       try {
-        const word_de = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[1]`, { timeout: 100 });
-        const word_pl = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[2]`, { timeout: 100 });
-        console.log(`${word_pl} : ${word_de}`);
-        data.push({ "key": word_pl, "value": word_de });
+        const value = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[1]`, { timeout: 100 });
+        const key = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[2]`, { timeout: 100 });
+        // console.log(`${word_pl} : ${word_de}`);
+        data.push({ "key": key, "value": value });
         tr += 1;
       } catch (error) {
         break;
@@ -156,7 +169,12 @@ async function scraper(userId: number) {
     await browser.close();
 
     let json_data = JSON.stringify(data);
-    await client.query("INSERT INTO words(userId, list) VALUES($1, $2) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", [userId, json_data]);
+    try {
+        await client.query("INSERT INTO words(userId, list) VALUES($1, $2) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", [userId, json_data]);
+        logger.log(`scraper(): Data: ${json_data} pushed to database for session ${userId}`);
+    } catch(err) {
+        return logger.error(`scraper(): Cannot push data to database: ${(err as Error).message}`);
+    }
 }
 
 
