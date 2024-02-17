@@ -1,5 +1,6 @@
 import { devices, chromium, Browser } from "playwright";
 import { Pool } from "pg";
+import { createClient } from "redis";
 import dotenv from "dotenv";
 
 import logger from "./logger";
@@ -13,13 +14,20 @@ export interface DatabaseUserRes {
   password:       string;
   instaling_user: string;
   instaling_pass: string;
+  host          : string;
 };
 
+const redis = createClient({
+    url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
+    password: process.env.REDIS_PASSWORD
+});
+redis.connect();
+
 const pool = new Pool({
-  user: process.env.DATABASE_USERNAME,
-  password: process.env.DATABASE_PASSWORD,
-  host: process.env.DATABASE_HOST,
-  database: process.env.DATABASE_NAME
+    user: process.env.DATABASE_USERNAME,
+    password: process.env.DATABASE_PASSWORD,
+    host: process.env.DATABASE_HOST,
+    database: process.env.DATABASE_NAME
 });
 
 const userId = 2;
@@ -162,6 +170,7 @@ async function scraper(userId: number) {
         data.push({ "key": key, "value": value });
         tr += 1;
       } catch (error) {
+        logger.error(`scraper(): ${error}`);
         break;
       }
     }
