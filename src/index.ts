@@ -1,6 +1,6 @@
 import { devices, chromium, Browser } from "playwright";
 import { Pool } from "pg";
-import { createClient } from "redis";
+import * as amqp from "amqplib";
 import dotenv from "dotenv";
 
 import logger from "./logger";
@@ -14,14 +14,41 @@ export interface DatabaseUserRes {
   password:       string;
   instaling_user: string;
   instaling_pass: string;
-  host          : string;
 };
 
-const redis = createClient({
-    url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`,
-    password: process.env.REDIS_PASSWORD
-});
-redis.connect();
+async function worker() {
+    try {
+        const connection = await amqp.connect(`amqp://${process.env.RABBITMQ_HOST}`);
+        const channel = await connection.createChannel();
+
+        const queue = "scraper";
+
+        channel.assertQueue(queue, {
+            durable: true
+        });
+
+        channel.prefetch(1);
+        logger.log(`scraper() Waiting for tasks on channel ${queue}`);
+        channel.consume(queue, async (msg) => {
+            if (msg !== null) {
+                const msgContent = msg.content.toString();
+                const userId = parseInt(msgContent);
+                logger.log(`scraper() Received a task, starting scraping for session ${userId}`);
+                await scraper(userId);
+                    
+                setTimeout(() => {
+                    logger.log("scraper() Done scraping, waiting for next task");
+                    channel.ack(msg);
+                },);
+            } else {
+                console.log('Received null message');
+            }
+        });
+
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
 
 const pool = new Pool({
     user: process.env.DATABASE_USERNAME,
@@ -29,8 +56,6 @@ const pool = new Pool({
     host: process.env.DATABASE_HOST,
     database: process.env.DATABASE_NAME
 });
-
-const userId = 2;
 
 function xorEncryption(text: string, key: string): string {
   let encryptedText = "";
@@ -163,16 +188,27 @@ async function scraper(userId: number) {
     const data = [];
     let tr = 1;
     while (true) {
-      try {
-        const value = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[1]`, { timeout: 100 });
-        const key = await page.innerText(`//*[@id="assigned_words"]/tr[${tr}]/td[2]`, { timeout: 100 });
-        // console.log(`${word_pl} : ${word_de}`);
-        data.push({ "key": key, "value": value });
-        tr += 1;
-      } catch (error) {
-        logger.error(`scraper(): ${error}`);
-        break;
-      }
+        try {
+            const selectorValue = `//*[@id="assigned_words"]/tr[${tr}]/td[1]`;
+            const selectorKey = `//*[@id="assigned_words"]/tr[${tr}]/td[2]`;
+
+            // Check if the elements are present
+            const isValuePresent = await page.locator(selectorValue).isVisible();
+            const isKeyPresent = await page.locator(selectorKey).isVisible();
+
+            if (!isValuePresent || !isKeyPresent) {
+                break;
+            }
+
+            const value = await page.innerText(selectorValue, { timeout: 500 });
+            const key = await page.innerText(selectorKey, { timeout: 500 });
+
+            data.push({ "key": key, "value": value });
+            tr += 1;
+        } catch (error) {
+            logger.error(`scraper(): ${error}`);
+            break;
+        }
     }
 
     await browser.close();
@@ -187,5 +223,5 @@ async function scraper(userId: number) {
 }
 
 
-scraper(userId);
+worker();
  
