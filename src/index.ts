@@ -97,6 +97,12 @@ async function runBrowser(): Promise<Browser | false> {
     }
 }
 
+// 1 - Success
+// 1001 - Database error
+// 1002 - Cannot enter instaling.pl
+// 1003 - Cannot login
+// 1004 - Invalid login credentials
+
 async function scraper(userId: number, browser: Browser) {
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
@@ -106,7 +112,11 @@ async function scraper(userId: number, browser: Browser) {
         const result = await pool.query("SELECT instaling_user, instaling_pass FROM flags WHERE userid = $1", [ userId ]);
         userData = result.rows[0];
     } catch(err) {
-        return logger.error(`scraper(): Cannot query database: ${(err as Error).message}`);
+        return 1001;
+    }
+
+    if (!userData) {
+        return 1005;
     }
 
     const password = xorEncryption(userData.instaling_pass, env.INSTALING_KEY);
@@ -124,7 +134,7 @@ async function scraper(userId: number, browser: Browser) {
     try {
         await page.goto("https://instaling.pl/teacher.php?page=login");
     } catch(err) {
-        return logger.error("Cannot enter instaling.pl");
+        return 1002;
     }
 
     await page.waitForLoadState("domcontentloaded");
@@ -146,14 +156,14 @@ async function scraper(userId: number, browser: Browser) {
         logger.log(`scraper(): Logged in for session ${userId}`);
     } catch(err) {
         await context.close();
-        return logger.error(`scraper(): Cannot login: ${(err as Error).message}`);
+        return 1003;
     }
 
     await page.waitForLoadState("domcontentloaded");
 
     if (!page.url().startsWith("https://instaling.pl/student/pages/mainPage.php")) {
         await context.close();
-        return logger.warn(`scraper(): Invalid login credentials for session ${userId}`);
+        return 1004;
     }
 
     // --[ SCRAPE LOGIC ]------------------------------------------------------
@@ -197,7 +207,7 @@ async function scraper(userId: number, browser: Browser) {
             data.push({ "key": replaceDomElement(key).trim(), "value": replaceDomElement(value).trim() });
             translationNumber += 1;
         } catch (error) {
-            logger.error(`scraper(): ${error}`);
+            logger.error(`scraper(): ${error} for user ${userId}`);
             break;
         }
     }
@@ -207,10 +217,9 @@ async function scraper(userId: number, browser: Browser) {
     const json_data = JSON.stringify(data);
     try {
         await pool.query("INSERT INTO words(userId, list) VALUES($1, $2) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", [userId, json_data]);
-        logger.log(`scraper(): Data: ${json_data} pushed to database for session ${userId}`);
-        return true;
+        return 1;
     } catch(err) {
-        return logger.error(`scraper(): Cannot push data to database: ${(err as Error).message}`);
+        return 1001;
     }
 };
 
@@ -240,13 +249,31 @@ async function worker() {
 
             logger.log(`scraper(): Received a task, starting scraping for user ${userId}`);
             const res = await scraper(userId, browser);
-            
-            if (!res) {
-                logger.error("scraper(): Failed to scrape, requeuing task");
-                return channel.nack(msg);
+
+            switch (res) {
+                case 1:
+                    logger.log(`scraper(): Finished scraping for user ${userId}`);
+                    break;
+                case 1001:
+                    logger.error(`scraper(): Failed to push data to database for user ${userId}`);
+                    break;
+                case 1002:
+                    logger.error(`scraper(): Cannot enter instaling.pl for user ${userId}`);
+                    break;
+                case 1003:
+                    logger.error(`scraper(): Cannot login for user ${userId}`);
+                    break;
+                case 1004:
+                    logger.error(`scraper(): Invalid login credentials for user ${userId}`);
+                    break;
+                case 1005:
+                    logger.error(`scraper(): No data found for user ${userId}`);
+                    break;
+                default:
+                    logger.error(`scraper(): Unknown error for user ${userId}`);
+                    break;
             }
 
-            logger.log("scraper(): Finished scraping, waiting for next task");
             channel.ack(msg);
         });
     } catch (error) {
