@@ -7,7 +7,8 @@ import logger from "./logger";
 
 dotenv.config();
 
-export interface DatabaseUserRes {
+export interface DatabaseFlagRes {
+    flagid: number;
     userid: number;
     email: string;
     username: string;
@@ -89,7 +90,7 @@ function replaceDomElement(text: string): string {
 async function runBrowser(): Promise<Browser | false> {
     try {
         return await chromium.launch({
-            headless: false,
+            headless: true,
             args: ["--mute-audio"],
         });
     } catch(err) {
@@ -103,13 +104,13 @@ async function runBrowser(): Promise<Browser | false> {
 // 1003 - Cannot login
 // 1004 - Invalid login credentials
 
-async function scraper(userId: number, browser: Browser) {
+async function scraper(flagid: number, browser: Browser) {
     // --[ DATABASE LOGIC ]-----------------------------------------------------
 
-    let userData: DatabaseUserRes;
+    let userData: DatabaseFlagRes;
 
     try {
-        const result = await pool.query("SELECT instaling_user, instaling_pass FROM flags WHERE userid = $1", [ userId ]);
+        const result = await pool.query("SELECT instaling_user, instaling_pass, userid FROM flags WHERE flagid = $1", [ flagid ]);
         userData = result.rows[0];
     } catch(err) {
         return 1001;
@@ -153,7 +154,7 @@ async function scraper(userId: number, browser: Browser) {
         await page.locator('//*[@id="log_password"]').pressSequentially(password, { delay: random(230, 600) });
         await sleep(random(500, 1500));
         await page.locator('//*[@id="main-container"]/div[3]/form/div/div[3]/button').click();
-        logger.log(`scraper(): Logged in for session ${userId}`);
+        logger.log(`scraper(): Logged in for session ${flagid}`);
     } catch(err) {
         await context.close();
         return 1003;
@@ -207,7 +208,7 @@ async function scraper(userId: number, browser: Browser) {
             data.push({ "key": replaceDomElement(key).trim(), "value": replaceDomElement(value).trim() });
             translationNumber += 1;
         } catch (error) {
-            logger.error(`scraper(): ${error} for user ${userId}`);
+            logger.error(`scraper(): ${error} for user ${flagid}`);
             break;
         }
     }
@@ -216,7 +217,7 @@ async function scraper(userId: number, browser: Browser) {
 
     const json_data = JSON.stringify(data);
     try {
-        await pool.query("INSERT INTO words(userId, list) VALUES($1, $2) ON CONFLICT (userId) DO UPDATE SET list = EXCLUDED.list;", [userId, json_data]);
+        await pool.query("INSERT INTO words(flagid, userid, list) VALUES($1, $2, $3) ON CONFLICT (flagid) DO UPDATE SET list = EXCLUDED.list;", [flagid, userData.userid, json_data]);
         return 1;
     } catch(err) {
         return 1001;
@@ -245,32 +246,32 @@ async function worker() {
             if (msg == null) return logger.warn("Received null message");
 
             const msgContent = msg.content.toString();
-            const userId = parseInt(msgContent);
+            const flagid = parseInt(msgContent);
 
-            logger.log(`scraper(): Received a task, starting scraping for user ${userId}`);
-            const res = await scraper(userId, browser);
+            logger.log(`scraper(): Received a task, starting scraping for flag ${flagid}`);
+            const res = await scraper(flagid, browser);
 
             switch (res) {
                 case 1:
-                    logger.log(`scraper(): Finished scraping for user ${userId}`);
+                    logger.log(`scraper(): Finished scraping for flag ${flagid}`);
                     break;
                 case 1001:
-                    logger.error(`scraper(): Failed to push data to database for user ${userId}`);
+                    logger.error(`scraper(): Failed to push data to database for flag ${flagid}`);
                     break;
                 case 1002:
-                    logger.error(`scraper(): Cannot enter instaling.pl for user ${userId}`);
+                    logger.error(`scraper(): Cannot enter instaling.pl for flag ${flagid}`);
                     break;
                 case 1003:
-                    logger.error(`scraper(): Cannot login for user ${userId}`);
+                    logger.error(`scraper(): Cannot login for flag ${flagid}`);
                     break;
                 case 1004:
-                    logger.error(`scraper(): Invalid login credentials for user ${userId}`);
+                    logger.error(`scraper(): Invalid login credentials for flag ${flagid}`);
                     break;
                 case 1005:
-                    logger.error(`scraper(): No data found for user ${userId}`);
+                    logger.error(`scraper(): No data found for flag ${flagid}`);
                     break;
                 default:
-                    logger.error(`scraper(): Unknown error for user ${userId}`);
+                    logger.error(`scraper(): Unknown error for flag ${flagid}`);
                     break;
             }
 
