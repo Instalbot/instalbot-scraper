@@ -76,7 +76,7 @@ function random(min: number, max: number) {
 };
 
 function replaceDomElement(text: string): string {
-    const replaceWith = { "&amp;": '&', "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#039;": "'"};
+    const replaceWith = { " ": " ", "&nbsp;": " ", "&amp;": '&', "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#039;": "'"};
 
     Object.keys(replaceWith).map(key => {
         // @ts-ignore
