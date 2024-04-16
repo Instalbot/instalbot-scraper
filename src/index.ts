@@ -61,7 +61,7 @@ function xorEncryption(text: string, key: string): string {
         );
     }
 
-    return encryptedText;
+    return text;
 };
 
 async function sleep(timeout: number) {
